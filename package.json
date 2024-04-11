@@ -1,0 +1,28 @@
+{
+  "name": "uml-creator",
+  "version": "1.0.0",
+  "description": "Automate your UML diagrams",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheVeteranDev/uml-creator.git"
+  },
+  "author": "John Rukstalis III",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/TheVeteranDev/uml-creator/issues"
+  },
+  "homepage": "https://github.com/TheVeteranDev/uml-creator#readme",
+  "dependencies": {
+    "mermaid": "^10.9.0",
+    "mermaid.cli": "^0.5.1",
+    "pg": "^8.11.5",
+    "puppeteer": "^22.6.3",
+    "sharp": "^0.33.3"
+  }
+}
