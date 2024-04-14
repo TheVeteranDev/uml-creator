@@ -26,7 +26,22 @@ const main = async (args) => {
                 continue;
             }
 
-            mermaidString += `\t\t${c.dataType.replace(" ", "_")} ${c.columnName}\n`;
+            mermaidString += `\t\t${c.dataType.replace(" ", "_")} ${c.columnName}`;
+            const keyStrings = [];
+            if (c.isPrimaryKey) {
+                keyStrings.push("PK");
+            }
+
+            if (c.isForeignKey) {
+                keyStrings.push("FK");
+            }   
+            
+            if (keyStrings.length > 0) {
+                mermaidString += " " + keyStrings.join(", ");
+            }
+            
+            mermaidString += "\n";
+
             usedColumnNames.push(c.columnName);
         }
         mermaidString += `\t}\n`;
@@ -43,45 +58,6 @@ const main = async (args) => {
             mermaidString += `\t${r.tableName} }o--o{ ${r.referencedTableName} : has\n`;
         }
     }
-
-    // for (const [table, columns] of schemaTables) {
-    //     for (const c of columns) {
-    //         if (c.oneToOne) {
-    //             mermaidString += c.oneToOne;
-    //         }
-
-    //         if (c.oneToMany) {
-    //             if (c.manyToMany) {
-    //                 mermaidString += c.manyToMany;
-    //             } else {
-    //                 mermaidString += c.oneToMany;
-    //             }                
-    //         }
-    //     }
-    //     mermaidString += `\t${table} {\n`;
-
-    //     const usedColumnNames = [];
-    //     for (const c of columns) {
-    //         if (usedColumnNames.includes(c.column_name)) {
-    //             continue;
-    //         }
-    //         mermaidString += `\t\t${c.data_type} ${c.column_name}`;
-
-    //         if (c.isPrimaryKey) {
-    //             mermaidString += ' PK\n';
-    //         } else if (c.isForeignKey) {
-    //             mermaidString += ' FK\n';
-    //         } else {
-    //             mermaidString += '\n';
-    //         }
-
-    //         usedColumnNames.push(c.column_name);
-    //     }
-
-    //     mermaidString += '\t} \n';
-
-    //     i++;
-    // }
 
     const html = `
     <html style="height: 100%;">
@@ -104,6 +80,9 @@ const main = async (args) => {
 
         // Set the viewport to a large size to ensure the diagram is fully rendered
         await page.setViewport({ width: 2840, height: 2160 });
+
+
+        console.log('Generating database UML diagram...');
 
         // Wait for the page to load
         await page.setContent(html, { waitUntil: 'load' });
@@ -128,7 +107,7 @@ const main = async (args) => {
 
             console.log('Database UML diagram generated successfully!');
             process.exit(0);
-        }, 2000);
+        }, 1000);
 
     } catch (error) {
         console.error('Error:', error);
