@@ -1,13 +1,14 @@
 import puppeteer from 'puppeteer';
 import { getPostgresSchema } from './databaseConnection.js';
 import sharp from 'sharp';
+import fs from "fs";
 
 const main = async (args) => {
     const [username, password, host, port, database] = args;
     let schemaTables = [];
 
     try {
-        schemaTables = await getPostgresSchema(username, "$" + password, host, port, database);
+        schemaTables = await getPostgresSchema(username, password, host, port, database);
     } catch (error) {
         console.error('Error:', error);
         return;
@@ -15,29 +16,72 @@ const main = async (args) => {
 
     let mermaidString = "erDiagram\n";
 
-    let i = 0;
-    const tables = Array.from(schemaTables.keys());
-
-    for (const [table, columns] of schemaTables) {
-        if (i > 0) {
-            mermaidString += `\t${tables[i-1]} ||--o{ ${table} : contains\n`;
-        }
+    for (const [table, v] of schemaTables) {
         mermaidString += `\t${table} {\n`;
 
-        for (const c of columns) {
-            mermaidString += `\t\t${c.data_type} ${c.column_name}`;
+        const usedColumnNames = [];
 
-            if (c.isPrimaryKey) {
-                mermaidString += ' PK\n';
-            } else {
-                mermaidString += '\n';
+        for (const c of v.columns) {
+            if (usedColumnNames.includes(c.columnName)) {
+                continue;
             }
+
+            mermaidString += `\t\t${c.dataType.replace(" ", "_")} ${c.columnName}\n`;
+            usedColumnNames.push(c.columnName);
+        }
+        mermaidString += `\t}\n`;
+
+        for (const r of v.relationships.oneToOne) {            
+            mermaidString += `\t${r.tableName} ||--|| ${r.referencedTableName} : has\n`;
         }
 
-        mermaidString += '\t} \n';
+        for (const r of v.relationships.oneToMany) {
+            mermaidString += `\t${r.tableName} ||--o{ ${r.referencedTableName} : has\n`;
+        }
 
-        i++;
+        for (const r of v.relationships.manyToMany) {
+            mermaidString += `\t${r.tableName} }o--o{ ${r.referencedTableName} : has\n`;
+        }
     }
+
+    // for (const [table, columns] of schemaTables) {
+    //     for (const c of columns) {
+    //         if (c.oneToOne) {
+    //             mermaidString += c.oneToOne;
+    //         }
+
+    //         if (c.oneToMany) {
+    //             if (c.manyToMany) {
+    //                 mermaidString += c.manyToMany;
+    //             } else {
+    //                 mermaidString += c.oneToMany;
+    //             }                
+    //         }
+    //     }
+    //     mermaidString += `\t${table} {\n`;
+
+    //     const usedColumnNames = [];
+    //     for (const c of columns) {
+    //         if (usedColumnNames.includes(c.column_name)) {
+    //             continue;
+    //         }
+    //         mermaidString += `\t\t${c.data_type} ${c.column_name}`;
+
+    //         if (c.isPrimaryKey) {
+    //             mermaidString += ' PK\n';
+    //         } else if (c.isForeignKey) {
+    //             mermaidString += ' FK\n';
+    //         } else {
+    //             mermaidString += '\n';
+    //         }
+
+    //         usedColumnNames.push(c.column_name);
+    //     }
+
+    //     mermaidString += '\t} \n';
+
+    //     i++;
+    // }
 
     const html = `
     <html style="height: 100%;">
@@ -57,22 +101,32 @@ const main = async (args) => {
     try {
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
+
+        // Set the viewport to a large size to ensure the diagram is fully rendered
         await page.setViewport({ width: 2840, height: 2160 });
 
+        // Wait for the page to load
         await page.setContent(html, { waitUntil: 'load' });
 
+        // Wait for the diagram to render
         setTimeout(async () => {
+            // Create temporary screenshot
             await page.screenshot({ path: 'diagrams/screenshot.png' });
 
             await browser.close();
 
-            console.log('Screenshot taken');
-
+            // Trim the screenshot and remove the white background and save it as diagram.png
             await sharp('diagrams/screenshot.png')
                 .flatten({ background: { r: 255, g: 255, b: 255, alpha: 0 } })
                 .trim()
                 .toFile('diagrams/diagram.png');
+            
+            // Deletes the temporary screen shot
+            fs.unlink('diagrams/screenshot.png', err => {
+                if (err) throw err;
+            });
 
+            console.log('Database UML diagram generated successfully!');
             process.exit(0);
         }, 2000);
 
