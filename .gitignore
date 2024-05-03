@@ -1,6 +1,3 @@
 # Ignore the node dependencies and lock files
 /node_modules
 package-lock.json
-
-# Ignore any png files created in the diagrams directory
-/diagrams/*.png
