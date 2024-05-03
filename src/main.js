@@ -1,119 +1,203 @@
-import puppeteer from 'puppeteer';
 import { getPostgresSchema } from './databaseConnection.js';
-import sharp from 'sharp';
 import fs from "fs";
+import { execSync } from 'child_process';
 
-const main = async (args) => {
-    const [username, password, host, port, database] = args;
+const writeTableAndColumns = (table, columns) => {
+    const usedColumnNames = [];
+
+    let mermaidString = `\t${table} {\n`;
+
+    for (const c of columns) {
+        if (usedColumnNames.includes(c.columnName)) {
+            continue;
+        }
+
+        let dataType = c.dataType.replace(" ", "").toUpperCase();
+
+        if (c.characterMaximumLength) {
+            dataType += `(${c.characterMaximumLength})`;
+        }
+
+        mermaidString += `\t\t${dataType} ${c.columnName}`;
+
+        const keyStrings = [];
+        if (c.isPrimaryKey) {
+            keyStrings.push("PK");
+        }
+
+        if (c.isForeignKey) {
+            keyStrings.push("FK");
+        }   
+        
+        if (keyStrings.length > 0) {
+            mermaidString += " " + keyStrings.join(", ");
+        }
+        
+        mermaidString += "\n";
+
+        usedColumnNames.push(c.columnName);
+    }
+
+    mermaidString += "\t}\n";
+
+    return mermaidString;
+};
+
+export const main = async (event, context) => {
+    for (const schema of event["schemas"]) {
+        await createUMLs(
+            event["username"],
+            event["password"],
+            event["host"],
+            event["port"],
+            event["database"],
+            schema
+        )
+    }
+}
+
+export const createUMLs = async (username, password, host, port, database, schema) => {
     let schemaTables = [];
 
     try {
-        schemaTables = await getPostgresSchema(username, password, host, port, database);
+        schemaTables = await getPostgresSchema(username, password, host, port, database, schema);
     } catch (error) {
         console.error('Error:', error);
         return;
     }
 
-    let mermaidString = "erDiagram\n";
+    const schemaTablesMap = new Map();
+    const tableColumnsMap = new Map();
+
+    let allMermaidString = "erDiagram\n";
 
     for (const [table, v] of schemaTables) {
-        mermaidString += `\t${table} {\n`;
+        const mermaidString = writeTableAndColumns(table, v.columns);
+        schemaTablesMap.set(table, mermaidString);
+        tableColumnsMap.set(table, mermaidString);
+        allMermaidString += mermaidString;
+    }
 
-        const usedColumnNames = [];
+    for (const [table, v] of schemaTables) {
+        for (const r of v.relationships.oneToOne) {
+            const relationship = `\t${r.tableName} ||--|| ${r.referencedTableName} : has\n`;
+            allMermaidString += relationship;
 
-        for (const c of v.columns) {
-            if (usedColumnNames.includes(c.columnName)) {
-                continue;
+            let mermaidString = schemaTablesMap.get(table);
+            const primaryTable = tableColumnsMap.get(r.tableName);
+            const relatedTable = tableColumnsMap.get(r.referencedTableName);
+
+            const hasPrimaryTable = mermaidString.includes(primaryTable);
+            const hasRelatedTable = mermaidString.includes(relatedTable);
+
+            if (!hasPrimaryTable) {
+                mermaidString += primaryTable;
             }
 
-            mermaidString += `\t\t${c.dataType.replace(" ", "_")} ${c.columnName}`;
-            const keyStrings = [];
-            if (c.isPrimaryKey) {
-                keyStrings.push("PK");
+            if (!hasRelatedTable) {
+                mermaidString += relatedTable;
             }
 
-            if (c.isForeignKey) {
-                keyStrings.push("FK");
-            }   
-            
-            if (keyStrings.length > 0) {
-                mermaidString += " " + keyStrings.join(", ");
+            let hasRelationship = mermaidString.includes(relationship);
+            if (!hasRelationship) {
+                schemaTablesMap.set(table, mermaidString + relationship);
             }
-            
-            mermaidString += "\n";
 
-            usedColumnNames.push(c.columnName);
-        }
-        mermaidString += `\t}\n`;
-
-        for (const r of v.relationships.oneToOne) {            
-            mermaidString += `\t${r.tableName} ||--|| ${r.referencedTableName} : has\n`;
+            mermaidString = schemaTablesMap.get(r.referencedTableName);
+            hasRelationship = mermaidString.includes(relationship);
+            if (!hasRelationship) {
+                schemaTablesMap.set(r.referencedTableName, mermaidString + relationship);
+            }
         }
 
         for (const r of v.relationships.oneToMany) {
-            mermaidString += `\t${r.tableName} ||--o{ ${r.referencedTableName} : has\n`;
+            const relationship = `\t${r.tableName} ||--o{ ${r.referencedTableName} : has\n`;
+            allMermaidString += relationship;
+
+            let mermaidString = schemaTablesMap.get(table);
+            const primaryTable = tableColumnsMap.get(r.tableName);
+            const relatedTable = tableColumnsMap.get(r.referencedTableName);
+
+            const hasPrimaryTable = mermaidString.includes(primaryTable);
+            const hasRelatedTable = mermaidString.includes(relatedTable);
+
+            if (!hasPrimaryTable) {
+                mermaidString += primaryTable;
+            }
+
+            if (!hasRelatedTable) {
+                mermaidString += relatedTable;
+            }
+            
+            let hasRelationship = mermaidString.includes(relationship);
+            if (!hasRelationship) {
+                schemaTablesMap.set(table, mermaidString + relationship);
+            }
+
+            mermaidString = schemaTablesMap.get(r.referencedTableName);
+            hasRelationship = mermaidString.includes(relationship);
+            if (!hasRelationship) {
+                schemaTablesMap.set(r.referencedTableName, mermaidString + relationship);
+            }
         }
 
         for (const r of v.relationships.manyToMany) {
-            mermaidString += `\t${r.tableName} }o--o{ ${r.referencedTableName} : has\n`;
+            const relationship = `\t${r.tableName} }o--o{ ${r.referencedTableName} : has\n`;
+            allMermaidString += relationship;
+
+            let mermaidString = schemaTablesMap.get(table);
+            const primaryTable = tableColumnsMap.get(r.tableName);
+            const relatedTable = tableColumnsMap.get(r.referencedTableName);
+
+            const hasPrimaryTable = mermaidString.includes(primaryTable);
+            const hasRelatedTable = mermaidString.includes(relatedTable);
+
+            if (!hasPrimaryTable) {
+                mermaidString += primaryTable;
+            }
+
+            if (!hasRelatedTable) {
+                mermaidString += relatedTable;
+            }
+
+            let hasRelationship = mermaidString.includes(relationship);
+            if (!hasRelationship) {
+                schemaTablesMap.set(table, mermaidString + relationship);
+            }
+
+            mermaidString = schemaTablesMap.get(r.referencedTableName);
+            hasRelationship = mermaidString.includes(relationship);
+            if (!hasRelationship) {
+                schemaTablesMap.set(r.referencedTableName, mermaidString + relationship);
+            }
         }
     }
 
-    const html = `
-    <html style="height: 100%;">
-        <body style="height: 100%;">
-            <script type="module">
-                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-                mermaid.initialize({ startOnLoad: true });
-            </script>
-
-            <pre class="mermaid" style="margin: 0;">
-                ${mermaidString}
-            </pre>
-        </body>
-    </html>
-    `;
-
-    try {
-        const browser = await puppeteer.launch();
-        const page = await browser.newPage();
-
-        // Set the viewport to a large size to ensure the diagram is fully rendered
-        await page.setViewport({ width: 2840, height: 2160 });
-
-
-        console.log('Generating database UML diagram...');
-
-        // Wait for the page to load
-        await page.setContent(html, { waitUntil: 'load' });
-
-        // Wait for the diagram to render
-        setTimeout(async () => {
-            // Create temporary screenshot
-            await page.screenshot({ path: 'diagrams/screenshot.png' });
-
-            await browser.close();
-
-            // Trim the screenshot and remove the white background and save it as diagram.png
-            await sharp('diagrams/screenshot.png')
-                .flatten({ background: { r: 255, g: 255, b: 255, alpha: 0 } })
-                .trim()
-                .toFile('diagrams/diagram.png');
-            
-            // Deletes the temporary screen shot
-            fs.unlink('diagrams/screenshot.png', err => {
-                if (err) throw err;
-            });
-
-            console.log('Database UML diagram generated successfully!');
-            process.exit(0);
-        }, 1000);
-
-    } catch (error) {
-        console.error('Error:', error);
-        process.exit(1);
+    for (const [table, mermaidString] of schemaTablesMap) {
+        console.log("Creating UML for table:", table);
+        const finalString = "erDiagram\n" + mermaidString + "\n";
+        fs.writeFileSync(`diagrams/${schema}-${table}.mmd`, finalString);
+        execSync(`mmdc -i diagrams/${schema}-${table}.mmd -o diagrams/${schema}-${table}.png`);
+        fs.unlinkSync(`diagrams/${schema}-${table}.mmd`);
+        console.log(`${table} created successfully!`);
     }
 
+    console.log("Creating UML for all tables...");
+    fs.writeFileSync(`diagrams/${schema}-all.mmd`, allMermaidString);
+    execSync(`mmdc -i diagrams/${schema}-all.mmd -o diagrams/${schema}-all.png`);
+    fs.unlinkSync(`diagrams/${schema}-all.mmd`);
+    console.log("Complete database UML created successfully!");
+
+    process.exit(0);
+};
+
+const databaseInfo = {
+    username: "postgres", 
+    password: "postgres123", 
+    host: "localhost", 
+    port: "5432", 
+    database: "postgres", 
+    schemas: ["public"]
 }
 
-main(process.argv.slice(2));
+main(databaseInfo);

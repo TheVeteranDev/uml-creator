@@ -1,13 +1,17 @@
 import pg from "pg";
 import fs from "fs";
 
-export const getPostgresSchema = async (user, password, host, port, database) => {
+export const getPostgresSchema = async (user, password, host, port, database, schema) => {
     const pool = new pg.Pool({
         user: user,
         password: password,
         host: host,
         port: port,
         database: database,
+        // ssl: { rejectUnauthorized: false },
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000
     });
 
     console.log("Connecting to database...");
@@ -16,7 +20,7 @@ export const getPostgresSchema = async (user, password, host, port, database) =>
 
     console.log("Connected to database");
 
-    const allRelatsionshipsQuery = fs.readFileSync("sqls/allRelationships.sql", "utf8");
+    const allRelatsionshipsQuery = fs.readFileSync("sqls/allRelationships.sql", "utf-8");
 
     const allRelationshipsResults = await pool.query(allRelatsionshipsQuery);
 
@@ -25,7 +29,7 @@ export const getPostgresSchema = async (user, password, host, port, database) =>
         referencedTableName: row.referenced_table_name
     }));
 
-    const oneToOneQuery = fs.readFileSync("sqls/oneToOne.sql", "utf8");
+    const oneToOneQuery = fs.readFileSync("sqls/oneToOne.sql", "utf-8");
 
     const oneToOneResults = await pool.query(oneToOneQuery);
 
@@ -46,7 +50,7 @@ export const getPostgresSchema = async (user, password, host, port, database) =>
     });
     console.log("Retrieved one to many relationships...");
 
-    const tableQuery = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'";
+    const tableQuery = `SELECT table_name FROM information_schema.tables WHERE table_schema = '${schema}'`;
 
     const tableResults = await pool.query(tableQuery);
 
@@ -58,7 +62,7 @@ export const getPostgresSchema = async (user, password, host, port, database) =>
         console.log("Retrieving columns for table " + t + "...");
         const columnQuery = `SELECT
                 c.column_name,
-                c.data_type,
+                c.udt_name AS data_type,
                 c.character_maximum_length,
                 ARRAY_AGG(
                     CASE
@@ -82,7 +86,7 @@ export const getPostgresSchema = async (user, password, host, port, database) =>
                 c.table_name = '${t}'
             GROUP BY
                 c.column_name,
-                c.data_type,
+                c.udt_name,
                 c.character_maximum_length;
     `
 
@@ -90,7 +94,8 @@ export const getPostgresSchema = async (user, password, host, port, database) =>
 
         const columns = columnResults.rows.map(row => ({
             columnName: row.column_name,
-            dataType: row.data_type.replaceAll(" ", "_") + (row.characgter_maximum_length ? "_" + row.character_maximum_length : ""),
+            dataType: row.data_type,
+            characterMaximumLength: row.character_maximum_length,
             isUniqueKey: row.constraint_types.includes("UNIQUE"),
             isPrimaryKey: row.constraint_types.includes("PRIMARY KEY"),
             isForeignKey: row.constraint_types.includes("FOREIGN KEY")       
