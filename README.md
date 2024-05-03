@@ -2,7 +2,7 @@
 Create UML diagrams for your database.
 
 ## How to:
-1.  Download and unpack the zip file: [uml-creator-main,zip](https://github.com/TheVeteranDev/uml-creator/archive/refs/heads/main.zip)
+1.  Download and unpack the zip file: [uml-creator-main.zip](https://github.com/TheVeteranDev/uml-creator/archive/refs/heads/main.zip)
 
 2.  Open the src/main.js file and change the "event" object to the information for your database.
 ```
