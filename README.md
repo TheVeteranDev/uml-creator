@@ -19,7 +19,7 @@ const event = {
 }
 ```
 
-3.  Run "npm start"
+3.  Install node modules and run "npm start"
 ```
 npm i && npm start
 ```
