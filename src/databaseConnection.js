@@ -20,36 +20,6 @@ export const getPostgresSchema = async (user, password, host, port, database, sc
 
     console.log("Connected to database");
 
-    const allRelatsionshipsQuery = fs.readFileSync("sqls/allRelationships.sql", "utf-8");
-
-    const allRelationshipsResults = await pool.query(allRelatsionshipsQuery);
-
-    const allRelationships = allRelationshipsResults.rows.map(row => ({
-        tableName: row.table_name,
-        referencedTableName: row.referenced_table_name
-    }));
-
-    const oneToOneQuery = fs.readFileSync("sqls/oneToOne.sql", "utf-8");
-
-    const oneToOneResults = await pool.query(oneToOneQuery);
-
-    const oneToOneRelationships = oneToOneResults.rows.map(row => ({
-        tableName: row.table_name,
-        referencedTableName: row.referenced_table_name
-    }));
-
-    console.log("Retrieved one to one relationships...");
-
-    const manyToManyRelationships = allRelationships.filter(r => r.tableName.includes(r.referencedTableName));
-    console.log("Retrieved many to many relationships..");
-
-    const oneToManyRelationships = allRelationships.filter(r => {
-        return !oneToOneRelationships.find(o => o.tableName === r.tableName && o.referencedTableName === r.referencedTableName) 
-            && !manyToManyRelationships.find(m => m.tableName === r.tableName && m.referencedTableName === r.referencedTableName);
-    
-    });
-    console.log("Retrieved one to many relationships...");
-
     const tableQuery = `SELECT table_name FROM information_schema.tables WHERE table_schema = '${schema}'`;
 
     const tableResults = await pool.query(tableQuery);
@@ -101,17 +71,64 @@ export const getPostgresSchema = async (user, password, host, port, database, sc
             isForeignKey: row.constraint_types.includes("FOREIGN KEY")       
         }));
 
-        const oneToOnes = oneToOneRelationships.filter(r => r.tableName === t);
-        const oneToManys = oneToManyRelationships.filter(r => r.tableName === t);
-        const manyToManys = manyToManyRelationships.filter(r => r.tableName === t);
+        console.log("Columns retrieved for table " + t);
 
-        const relationships = {
-            oneToOne: oneToOnes,
-            oneToMany: oneToManys,
-            manyToMany: manyToManys
-        };
+        tableMap.set(t, { 
+            columns: columns,
+            oneToOnes: [],
+            oneToManys: [],
+            manyToManys: []
+        });
 
-        tableMap.set(t, {columns: columns, relationships: relationships});
+        console.log("Retrieving relationships for table " + t + "...");
+
+        const relationshipsQuery = `
+            SELECT
+                conname AS constraint_name,
+                conrelid::regclass AS origin_table,
+                confrelid::regclass AS referenced_table,
+                kcu.column_name AS column_name,
+                tc.constraint_type AS constraint_type
+            FROM
+                pg_constraint
+            JOIN
+                information_schema.key_column_usage AS kcu ON kcu.constraint_name = conname
+            JOIN
+                information_schema.table_constraints AS tc ON tc.constraint_name = conname
+            WHERE
+                connamespace = (
+                    SELECT oid
+                    FROM pg_namespace
+                    WHERE nspname = '${schema}'
+                ) 
+                AND conrelid = '${t}'::regclass;  
+        `;
+
+        const relationshipsResults = await pool.query(relationshipsQuery);
+        const rows = relationshipsResults.rows;
+
+        if (rows.length > 0) {
+            const unique = rows.filter(row => row.constraint_type === "UNIQUE");
+            const pks = rows.filter(row => row.constraint_type === "PRIMARY KEY");
+            const fks = rows.filter(row => row.constraint_type === "FOREIGN KEY");
+
+            if (fks.length === 1 && unique.length === 1 && pks.length === 1) {
+                const mermaidString = `\t${t} ||--|| ${fks[0].referenced_table} : has\n`;
+                tableMap.get(t).oneToOnes.push(mermaidString);
+            }
+
+            if (fks.length === 1 && unique.length === 0 && pks.length === 1) {
+                const mermaidString = `\t${t} ||--o{ ${fks[0].referenced_table} : has\n`;
+                tableMap.get(t).oneToManys.push(mermaidString);
+            }
+
+            if (fks.length > 1 && unique.length === 0 && pks.length > 1) {
+                for (const fk of fks) {
+                    const mermaidString = `\t${t} }o--o{ ${fk.referenced_table} : has\n`;
+                    tableMap.get(t).manyToManys.push(mermaidString);
+                }
+            }
+        }
     }
 
     pool.end();

@@ -13,111 +13,28 @@ export const createUMLs = async (username, password, host, port, database, schem
     }
 
     const schemaTablesMap = new Map();
-    const tableColumnsMap = new Map();
 
-    let allMermaidString = "erDiagram\n";
+    let allMermaidString = "";
 
     for (const [table, v] of schemaTables) {
-        const mermaidString = writeTableAndColumns(table, v.columns);
+        let mermaidString = writeTableAndColumns(table, v.columns);
+        for (const r of v.oneToOnes) {
+            mermaidString += r ;
+        }
+
+        for (const r of v.oneToManys) {
+            mermaidString += r;
+        }
+
+        for (const r of v.manyToManys) {
+            mermaidString += r;
+        }
+
         schemaTablesMap.set(table, mermaidString);
-        tableColumnsMap.set(table, mermaidString);
-        allMermaidString += mermaidString;
+        allMermaidString += mermaidString +"\n";
     }
 
-    for (const [table, v] of schemaTables) {
-        for (const r of v.relationships.oneToOne) {
-            const relationship = `\t${r.tableName} ||--|| ${r.referencedTableName} : has\n`;
-            allMermaidString += relationship;
-
-            let mermaidString = schemaTablesMap.get(table);
-            const primaryTable = tableColumnsMap.get(r.tableName);
-            const relatedTable = tableColumnsMap.get(r.referencedTableName);
-
-            const hasPrimaryTable = mermaidString.includes(primaryTable);
-            const hasRelatedTable = mermaidString.includes(relatedTable);
-
-            if (!hasPrimaryTable) {
-                mermaidString += primaryTable;
-            }
-
-            if (!hasRelatedTable) {
-                mermaidString += relatedTable;
-            }
-
-            let hasRelationship = mermaidString.includes(relationship);
-            if (!hasRelationship) {
-                schemaTablesMap.set(table, mermaidString + relationship);
-            }
-
-            mermaidString = schemaTablesMap.get(r.referencedTableName);
-            hasRelationship = mermaidString.includes(relationship);
-            if (!hasRelationship) {
-                schemaTablesMap.set(r.referencedTableName, mermaidString + relationship);
-            }
-        }
-
-        for (const r of v.relationships.oneToMany) {
-            const relationship = `\t${r.tableName} ||--o{ ${r.referencedTableName} : has\n`;
-            allMermaidString += relationship;
-
-            let mermaidString = schemaTablesMap.get(table);
-            const primaryTable = tableColumnsMap.get(r.tableName);
-            const relatedTable = tableColumnsMap.get(r.referencedTableName);
-
-            const hasPrimaryTable = mermaidString.includes(primaryTable);
-            const hasRelatedTable = mermaidString.includes(relatedTable);
-
-            if (!hasPrimaryTable) {
-                mermaidString += primaryTable;
-            }
-
-            if (!hasRelatedTable) {
-                mermaidString += relatedTable;
-            }
-            
-            let hasRelationship = mermaidString.includes(relationship);
-            if (!hasRelationship) {
-                schemaTablesMap.set(table, mermaidString + relationship);
-            }
-
-            mermaidString = schemaTablesMap.get(r.referencedTableName);
-            hasRelationship = mermaidString.includes(relationship);
-            if (!hasRelationship) {
-                schemaTablesMap.set(r.referencedTableName, mermaidString + relationship);
-            }
-        }
-
-        for (const r of v.relationships.manyToMany) {
-            const relationship = `\t${r.tableName} }o--o{ ${r.referencedTableName} : has\n`;
-            allMermaidString += relationship;
-
-            let mermaidString = schemaTablesMap.get(table);
-            const primaryTable = tableColumnsMap.get(r.tableName);
-            const relatedTable = tableColumnsMap.get(r.referencedTableName);
-
-            const hasPrimaryTable = mermaidString.includes(primaryTable);
-            const hasRelatedTable = mermaidString.includes(relatedTable);
-
-            if (!hasPrimaryTable) {
-                mermaidString += primaryTable;
-            }
-
-            if (!hasRelatedTable) {
-                mermaidString += relatedTable;
-            }
-
-            let hasRelationship = mermaidString.includes(relationship);
-            if (!hasRelationship) {
-                schemaTablesMap.set(table, mermaidString + relationship);
-            }
-
-            mermaidString = schemaTablesMap.get(r.referencedTableName);
-            hasRelationship = mermaidString.includes(relationship);
-            if (!hasRelationship) {
-                schemaTablesMap.set(r.referencedTableName, mermaidString + relationship);
-            }
-        }
-    }
+    allMermaidString = "erDiagram\n" + allMermaidString;
 
     for (const [table, mermaidString] of schemaTablesMap) {
         console.log("Creating UML for table:", table);
