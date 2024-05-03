@@ -18,3 +18,10 @@ const event = {
     schemas: ["public"]
 }
 ```
+
+3.  Run "npm start"
+```
+npm start
+```
+
+4.  Winner, winner, chicken dinner!  All your diagrams are in the diagrams directory.
