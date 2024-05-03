@@ -21,7 +21,7 @@ const event = {
 
 3.  Run "npm start"
 ```
-npm start
+npm i && npm start
 ```
 
 4.  Winner, winner, chicken dinner!  All your diagrams are in the diagrams directory.
