@@ -1,3 +1,7 @@
 # Ignore the node dependencies and lock files
 /node_modules
 package-lock.json
+
+# Ignore all diagram images except public-all for the README
+diagrams/*
+!diagrams/public-all.png
