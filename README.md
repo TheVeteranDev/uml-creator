@@ -25,3 +25,6 @@ npm start
 ```
 
 4.  Winner, winner, chicken dinner!  All your diagrams are in the diagrams directory.
+
+## Example Diagram
+![Example diagram](diagrams/public-games_publishers.png)
